@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:macro name="wheel" params="prefix parent radius width *joint_origin *joint_axis">
+    <joint name="${prefix}_wheel_joint" type="continuous">
+      <xacro:insert_block name="joint_origin" />
+      <xacro:insert_block name="joint_axis" />
+      <parent link="${parent}" />
+      <child link="${prefix}_wheel_link" />
+    </joint>
+    <link name="${prefix}_wheel_link">
+      <visual>
+        <geometry>
+          <cylinder radius="${radius}" length="${width}" />
+        </geometry>
+        <material name="Black" />
+      </visual>
+    </link>
+  </xacro:macro>
+</robot>
