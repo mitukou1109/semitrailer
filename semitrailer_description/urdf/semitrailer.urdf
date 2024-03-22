@@ -90,24 +90,36 @@
     <axis xyz="0 0 1" />
   </xacro:wheel>
 
-  <joint name="tractor_steering_joint" type="continuous">
+  <joint name="tractor_steering_left_joint" type="continuous">
     <parent link="tractor_link" />
-    <child link="tractor_steering_link" />
-    <origin xyz="${tractor_length / 2} 0 0" />
+    <child link="tractor_steering_left_link" />
+    <origin xyz="${tractor_length / 2} ${tractor_width / 2} 0" />
     <axis xyz="0 0 1" />
   </joint>
 
-  <link name="tractor_steering_link" />
+  <link name="tractor_steering_left_link" />
 
-  <xacro:wheel prefix="tractor_front_left" parent="tractor_steering_link" radius="${wheel_radius}"
+  <xacro:wheel prefix="tractor_front_left" parent="tractor_steering_left_link"
+    radius="${wheel_radius}"
     width="${wheel_width}">
-    <origin xyz="0 ${tractor_width / 2} 0" rpy="${-radians(90)} 0 0" />
+    <origin rpy="${-radians(90)} 0 0" />
     <axis xyz="0 0 1" />
   </xacro:wheel>
 
-  <xacro:wheel prefix="tractor_front_right" parent="tractor_steering_link" radius="${wheel_radius}"
+  <joint name="tractor_steering_right_joint" type="continuous">
+    <parent link="tractor_link" />
+    <child link="tractor_steering_right_link" />
+    <origin xyz="${tractor_length / 2} ${-tractor_width / 2} 0" />
+    <axis xyz="0 0 1" />
+    <mimic joint="tractor_steering_left_joint" />
+  </joint>
+
+  <link name="tractor_steering_right_link" />
+
+  <xacro:wheel prefix="tractor_front_right" parent="tractor_steering_right_link"
+    radius="${wheel_radius}"
     width="${wheel_width}">
-    <origin xyz="0 ${-tractor_width / 2} 0" rpy="${radians(90)} 0 0" />
+    <origin rpy="${radians(90)} 0 0" />
     <axis xyz="0 0 1" />
   </xacro:wheel>
 </robot>
