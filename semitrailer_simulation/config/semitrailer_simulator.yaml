@@ -1,0 +1,8 @@
+semitrailer_simulator:
+  ros__parameters:
+    sampling_rate: 100
+    global_frame: world
+    base_frame: base_footprint
+    coupler_joint: coupler_joint
+    tractor_steering_joint: tractor_steering_left_joint
+    initial_state: [0., 0., 0., 0.]

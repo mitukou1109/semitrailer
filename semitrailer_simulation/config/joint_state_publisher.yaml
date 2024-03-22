@@ -1,0 +1,5 @@
+joint_state_publisher:
+  ros__parameters:
+    rate: 100
+    source_list:
+      - /semitrailer_simulator/joint_states
