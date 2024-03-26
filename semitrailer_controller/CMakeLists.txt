@@ -7,6 +7,15 @@ endif()
 
 find_package(ament_cmake_auto REQUIRED)
 
+find_package(vehicle_model REQUIRED)
+
 ament_auto_find_build_dependencies()
+
+ament_auto_add_library(semitrailer_nlmpc SHARED
+  src/semitrailer_nlmpc.cpp
+)
+target_link_libraries(semitrailer_nlmpc
+  vehicle_model::semitrailer_model
+)
 
 ament_auto_package()
