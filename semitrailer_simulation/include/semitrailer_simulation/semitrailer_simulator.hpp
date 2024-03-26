@@ -19,6 +19,9 @@ public:
   explicit SemitrailerSimulator(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
 private:
+  using SemitrailerState = vehicle_model::SemitrailerModel::State;
+  using SemitrailerInput = vehicle_model::SemitrailerModel::Input;
+
   void inputCallback(const semitrailer_interfaces::msg::Input::UniquePtr msg);
 
   void timerCallback();
@@ -32,8 +35,9 @@ private:
   std::string coupler_joint_ = "coupler_joint";
   std::string tractor_steering_joint_ = "tractor_steering_left_joint";
 
-  using SemitrailerState = vehicle_model::SemitrailerModel::State;
   SemitrailerState state_;
+
+  SemitrailerInput input_;
 
   std::unique_ptr<vehicle_model::SemitrailerModel> model_;
 
@@ -46,8 +50,5 @@ private:
   rclcpp::Subscription<semitrailer_interfaces::msg::Input>::SharedPtr input_sub_;
 
   rclcpp::TimerBase::SharedPtr timer_;
-
-  using SemitrailerInput = vehicle_model::SemitrailerModel::Input;
-  SemitrailerInput input_;
 };
 }  // namespace semitrailer_simulation
