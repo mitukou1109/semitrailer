@@ -18,4 +18,11 @@ target_link_libraries(semitrailer_nlmpc
   vehicle_model::semitrailer_model
 )
 
+ament_auto_add_library(simple_semitrailer_navigation SHARED
+  src/simple_semitrailer_navigation.cpp
+)
+target_link_libraries(simple_semitrailer_navigation
+  semitrailer_nlmpc
+)
+
 ament_auto_package()
