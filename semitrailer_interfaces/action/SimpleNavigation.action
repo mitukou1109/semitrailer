@@ -1,0 +1,4 @@
+semitrailer_interfaces/State goal
+---
+nav_msgs/Path predicted_trajectory
+---
