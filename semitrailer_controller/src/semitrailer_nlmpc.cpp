@@ -50,7 +50,8 @@ SemitrailerNLMPC::Result SemitrailerNLMPC::initialize(const SemitrailerState& cu
       max_longitudinal_velocity_ - std::abs(current_state(SemitrailerModel::V)),
       max_steering_angle_ - std::abs(current_state(SemitrailerModel::ALPHA));
 
-  traced_var_vec_ = (Eigen::VectorXd() << initial_guess, initial_dummy, Constraint::Zero())
+  traced_var_vec_ =
+      (Eigen::Matrix<double, NUM_OF_INPUT + NUM_OF_CONSTRAINT, 1>() << initial_guess, initial_dummy, Constraint::Zero())
                         .finished()
                         .replicate(prediction_horizon_, 1);
 
