@@ -34,9 +34,9 @@ void SemitrailerNLMPC::setLimit(double max_coupler_angle, double max_longitudina
   max_steering_angle_ = max_steering_angle;
 }
 
-SemitrailerNLMPC::Result SemitrailerNLMPC::initialize(const SemitrailerState& current_state,
-                                                      const SemitrailerState& ref_state,
-                                                      const SemitrailerInput& initial_guess)
+Eigen::VectorXd SemitrailerNLMPC::computeInitialTracedVar(const SemitrailerState& current_state,
+                                                          const SemitrailerState& ref_state,
+                                                          const SemitrailerInput& initial_guess)
 {
   if (std::abs(current_state(SemitrailerModel::BETA)) > max_coupler_angle_ ||
       std::abs(initial_guess(SemitrailerModel::V)) > max_longitudinal_velocity_ ||
@@ -47,44 +47,45 @@ SemitrailerNLMPC::Result SemitrailerNLMPC::initialize(const SemitrailerState& cu
 
   DummyInput initial_dummy;
   initial_dummy << max_coupler_angle_ - std::abs(current_state(SemitrailerModel::BETA)),
-      max_longitudinal_velocity_ - std::abs(current_state(SemitrailerModel::V)),
-      max_steering_angle_ - std::abs(current_state(SemitrailerModel::ALPHA));
+      max_longitudinal_velocity_ - std::abs(initial_guess(SemitrailerModel::V)),
+      max_steering_angle_ - std::abs(initial_guess(SemitrailerModel::ALPHA));
 
-  traced_var_vec_ =
+  Eigen::VectorXd traced_var =
       (Eigen::Matrix<double, NUM_OF_INPUT + NUM_OF_CONSTRAINT, 1>() << initial_guess, initial_dummy, Constraint::Zero())
-                        .finished()
-                        .replicate(prediction_horizon_, 1);
+          .finished()
+          .replicate(prediction_horizon_, 1);
 
-  NonLinearFunctor functor([this, current_state, ref_state](const NonLinearFunctor::InputType& traced_var_vec,
+  NonLinearFunctor functor([this, current_state, ref_state](const NonLinearFunctor::InputType& traced_var,
                                                             NonLinearFunctor::ValueType& residual) {
-    residual = optimalityFunction(traced_var_vec, current_state, ref_state);
+    residual = optimalityFunction(traced_var, current_state, ref_state);
   });
 
   Eigen::HybridNonLinearSolver solver(functor);
-  solver.solveNumericalDiff(traced_var_vec_);
+  solver.solveNumericalDiff(traced_var);
 
-  traced_var_dot_vec_ = Eigen::VectorXd::Zero((NUM_OF_INPUT + NUM_OF_CONSTRAINT) * prediction_horizon_);
+  traced_var_dot_ = Eigen::VectorXd::Zero(traced_var.size());
 
   initialized_ = true;
 
-  return generateResult(current_state);
+  return traced_var;
 }
 
-SemitrailerNLMPC::Result SemitrailerNLMPC::computeInput(const SemitrailerState& current_state,
-                                                        const SemitrailerState& ref_state)
+Eigen::VectorXd SemitrailerNLMPC::computeTracedVarDot(const SemitrailerState& current_state,
+                                                      const Eigen::VectorXd& current_traced_var,
+                                                      const SemitrailerState& ref_state)
 {
   if (!initialized_)
   {
     return {};
   }
 
-  NonLinearFunctor functor([this, current_state, ref_state](const NonLinearFunctor::InputType& traced_var_dot_vec,
-                                                            NonLinearFunctor::ValueType& residual) {
-    const auto real_input = traced_var_vec_.head(NUM_OF_REAL_INPUT);
-    auto F_t = optimalityFunction(traced_var_vec_, current_state, ref_state);
-
+  NonLinearFunctor functor([this, current_state, current_traced_var,
+                            ref_state](const NonLinearFunctor::InputType& traced_var_dot,
+                                       NonLinearFunctor::ValueType& residual) {
+    const auto real_input = getRealInput(current_traced_var);
+    auto F_t = optimalityFunction(current_traced_var, current_state, ref_state);
     residual = (optimalityFunction(
-                    traced_var_vec_ + difference_spacing_ * traced_var_dot_vec,
+                    current_traced_var + difference_spacing_ * traced_var_dot,
                     current_state + difference_spacing_ * model_.stateFunction(current_state, real_input), ref_state) -
                 F_t) /
                    difference_spacing_ +
@@ -92,11 +93,32 @@ SemitrailerNLMPC::Result SemitrailerNLMPC::computeInput(const SemitrailerState& 
   });
 
   Eigen::HybridNonLinearSolver solver(functor);
-  solver.solveNumericalDiff(traced_var_dot_vec_);
+  solver.solveNumericalDiff(traced_var_dot_);
 
-  traced_var_vec_ += sampling_period_ * traced_var_dot_vec_;
+  return traced_var_dot_;
+}
 
-  return generateResult(current_state);
+std::vector<SemitrailerNLMPC::SemitrailerState>
+SemitrailerNLMPC::predictTrajectory(const SemitrailerState& current_state, const Eigen::VectorXd& current_traced_var)
+{
+  const Eigen::Map<const TracedVarSeries> traced_var_series(current_traced_var.data(), NUM_OF_INPUT + NUM_OF_CONSTRAINT,
+                                                            prediction_horizon_);
+  const auto input_series = traced_var_series.topRows(NUM_OF_INPUT);
+
+  const auto state_series = getStateSeries(current_state, input_series);
+
+  std::vector<SemitrailerState> trajectory;
+  for (std::size_t i = 0; i < prediction_horizon_; ++i)
+  {
+    trajectory.push_back(state_series.col(i));
+  }
+
+  return trajectory;
+}
+
+SemitrailerNLMPC::SemitrailerInput SemitrailerNLMPC::getRealInput(const Eigen::VectorXd& traced_var)
+{
+  return traced_var.head(NUM_OF_REAL_INPUT);
 }
 
 double SemitrailerNLMPC::costFunction(const State& state, const Input& input, const State& ref_state)
@@ -198,27 +220,11 @@ SemitrailerNLMPC::HamiltonianInputJacobian SemitrailerNLMPC::hamiltonianInputJac
   return dHdu;
 }
 
-SemitrailerNLMPC::StateSeries SemitrailerNLMPC::predictTrajectory(const State& initial_state,
-                                                                  const InputSeries& input_series)
-{
-  StateSeries state_series(NUM_OF_STATE, prediction_horizon_ + 1);
-  state_series.col(0) = initial_state;
-
-  for (std::size_t i = 0; i < prediction_horizon_; ++i)
-  {
-    state_series.col(i + 1) =
-        state_series.col(i) +
-        model_.stateFunction(state_series.col(i), input_series.col(i).head(NUM_OF_REAL_INPUT)) * sampling_period_;
-  }
-
-  return state_series;
-}
-
 std::pair<SemitrailerNLMPC::StateSeries, SemitrailerNLMPC::CostateSeries>
 SemitrailerNLMPC::eulerLagrange(const State& initial_state, const InputSeries& input_series,
                                 const LagrangeSeries& lagrange_series, const State& ref_state)
 {
-  auto state_series = predictTrajectory(initial_state, input_series);
+  const auto state_series = getStateSeries(initial_state, input_series);
 
   CostateSeries costate_series(NUM_OF_STATE, prediction_horizon_);
 
@@ -237,10 +243,10 @@ SemitrailerNLMPC::eulerLagrange(const State& initial_state, const InputSeries& i
   return { state_series, costate_series };
 }
 
-Eigen::VectorXd SemitrailerNLMPC::optimalityFunction(const Eigen::VectorXd& traced_var_vec, const State& state,
+Eigen::VectorXd SemitrailerNLMPC::optimalityFunction(const Eigen::VectorXd& traced_var, const State& state,
                                                      const State& ref_state)
 {
-  const Eigen::Map<const TracedVarSeries> traced_var_series(traced_var_vec.data(), NUM_OF_INPUT + NUM_OF_CONSTRAINT,
+  const Eigen::Map<const TracedVarSeries> traced_var_series(traced_var.data(), NUM_OF_INPUT + NUM_OF_CONSTRAINT,
                                                             prediction_horizon_);
   const auto input_series = traced_var_series.topRows(NUM_OF_INPUT);
   const auto lagrange_series = traced_var_series.bottomRows(NUM_OF_CONSTRAINT);
@@ -259,22 +265,19 @@ Eigen::VectorXd SemitrailerNLMPC::optimalityFunction(const Eigen::VectorXd& trac
   return Eigen::Map<Eigen::VectorXd>(F.data(), F.size());
 }
 
-SemitrailerNLMPC::Result SemitrailerNLMPC::generateResult(const SemitrailerState& current_state)
+SemitrailerNLMPC::StateSeries SemitrailerNLMPC::getStateSeries(const State& initial_state,
+                                                               const InputSeries& input_series)
 {
-  const Eigen::Map<const TracedVarSeries> traced_var_series(traced_var_vec_.data(), NUM_OF_INPUT + NUM_OF_CONSTRAINT,
-                                                            prediction_horizon_);
-  const auto input_series = traced_var_series.topRows(NUM_OF_INPUT);
+  StateSeries state_series(NUM_OF_STATE, prediction_horizon_ + 1);
+  state_series.col(0) = initial_state;
 
-  Result result;
-
-  result.input = input_series.col(0).head(NUM_OF_REAL_INPUT);
-
-  auto predicted_trajectory = predictTrajectory(current_state, input_series);
   for (std::size_t i = 0; i < prediction_horizon_; ++i)
   {
-    result.predicted_trajectory.push_back(predicted_trajectory.col(i));
+    state_series.col(i + 1) =
+        state_series.col(i) +
+        model_.stateFunction(state_series.col(i), input_series.col(i).head(NUM_OF_REAL_INPUT)) * sampling_period_;
   }
 
-  return result;
+  return state_series;
 }
 }  // namespace semitrailer_controller

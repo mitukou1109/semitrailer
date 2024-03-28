@@ -12,12 +12,6 @@ public:
   using SemitrailerInput = SemitrailerModel::Input;
   using SemitrailerParam = SemitrailerModel::Param;
 
-  struct Result
-  {
-    SemitrailerInput input = SemitrailerInput::Zero();
-    std::vector<SemitrailerState> predicted_trajectory = {};
-  };
-
   SemitrailerNLMPC(const SemitrailerParam& semitrailer_param);
 
   void setParameter(const std::size_t prediction_horizon, const double sampling_period,
@@ -27,10 +21,16 @@ public:
 
   void setLimit(double max_coupler_angle, double max_longitudinal_velocity, double max_steering_angle);
 
-  Result initialize(const SemitrailerState& current_state, const SemitrailerState& ref_state,
-                    const SemitrailerInput& initial_guess);
+  Eigen::VectorXd computeInitialTracedVar(const SemitrailerState& current_state, const SemitrailerState& ref_state,
+                                          const SemitrailerInput& initial_guess);
 
-  Result computeInput(const SemitrailerState& current_state, const SemitrailerState& ref_state);
+  Eigen::VectorXd computeTracedVarDot(const SemitrailerState& current_state, const Eigen::VectorXd& current_traced_var,
+                                      const SemitrailerState& ref_state);
+
+  std::vector<SemitrailerState> predictTrajectory(const SemitrailerState& current_state,
+                                                  const Eigen::VectorXd& current_traced_var);
+
+  SemitrailerInput getRealInput(const Eigen::VectorXd& traced_var);
 
 private:
   static constexpr int NUM_OF_CONSTRAINT = 3;
@@ -80,21 +80,19 @@ private:
   HamiltonianInputJacobian hamiltonianInputJacobian(const State& state, const Input& input, const State& costate,
                                                     const Constraint& lagrange, const State& ref_state);
 
-  StateSeries predictTrajectory(const State& initial_state, const InputSeries& input_series);
-
   std::pair<StateSeries, CostateSeries> eulerLagrange(const State& initial_state, const InputSeries& input_series,
                                                       const LagrangeSeries& lagrange_series, const State& ref_state);
 
-  Eigen::VectorXd optimalityFunction(const Eigen::VectorXd& traced_var_vec, const State& state, const State& ref_state);
+  Eigen::VectorXd optimalityFunction(const Eigen::VectorXd& traced_var, const State& state, const State& ref_state);
 
-  Result generateResult(const SemitrailerState& current_state);
+  StateSeries getStateSeries(const State& initial_state, const InputSeries& input_series);
 
   SemitrailerModel model_;
 
   std::size_t prediction_horizon_ = 0;
   double sampling_period_ = 0.;
-  double damping_coefficient_ = 10.;
-  double difference_spacing_ = 1e-4;
+  double damping_coefficient_ = 0.;
+  double difference_spacing_ = 0.;
 
   SemitrailerState state_weight_ = SemitrailerState::Zero();
   SemitrailerInput input_weight_ = SemitrailerInput::Zero();
@@ -106,7 +104,6 @@ private:
 
   bool initialized_ = false;
 
-  Eigen::VectorXd traced_var_vec_;
-  Eigen::VectorXd traced_var_dot_vec_;
+  Eigen::VectorXd traced_var_dot_;
 };
 }  // namespace semitrailer_controller
