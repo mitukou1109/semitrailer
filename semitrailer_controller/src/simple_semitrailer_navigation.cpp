@@ -26,6 +26,9 @@ SimpleSemitrailerNavigation::SimpleSemitrailerNavigation(const std::string& node
 
   controller_ = std::make_unique<SemitrailerNLMPC>(
       (vehicle_model::SemitrailerModel::Param() << tractor_length, hitch_length, trailer_length).finished());
+  controller_->setParameter(40, 0.5, 10.0, 1e-4);
+  controller_->setWeight(SemitrailerState::Constant(0.5), SemitrailerInput::Constant(0.5), 0.01);
+  controller_->setLimit(M_PI_2, 10., M_PI_4);
 
   input_pub_ = create_publisher<semitrailer_interfaces::msg::Input>("~/input", 10);
 
@@ -45,7 +48,10 @@ SimpleSemitrailerNavigation::SimpleSemitrailerNavigation(const rclcpp::NodeOptio
 
 void SimpleSemitrailerNavigation::stateCallback(const semitrailer_interfaces::msg::State::UniquePtr msg)
 {
-  state_ << msg->x, msg->y, msg->theta, msg->beta;
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    state_ << msg->x, msg->y, msg->theta, msg->beta;
+  }
 }
 
 rclcpp_action::GoalResponse SimpleSemitrailerNavigation::handleSimpleNavigationGoal(
@@ -72,20 +78,51 @@ void SimpleSemitrailerNavigation::executeSimpleNavigation(const std::shared_ptr<
   auto feedback = std::make_shared<SimpleNavigationAction::Feedback>();
   auto result = std::make_shared<SimpleNavigationAction::Result>();
 
+  SemitrailerState current_state;
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    current_state = state_;
+  }
+
+  SemitrailerState ref_state;
+  ref_state << goal->goal.x, goal->goal.y, goal->goal.theta, goal->goal.beta;
+  auto traced_var =
+      controller_->computeInitialTracedVar(current_state, ref_state, (SemitrailerInput() << 10., 0.).finished());
+
+  publishInput(controller_->getRealInput(traced_var));
+
   rclcpp::Rate rate(control_rate_);
 
   while (rclcpp::ok())
   {
     if (goal_handle->is_canceling())
     {
+      RCLCPP_INFO(get_logger(), "Goal canceled");
       goal_handle->canceled(result);
       return;
     }
+
+    {
+      std::lock_guard<std::mutex> lock(state_mutex_);
+      current_state = state_;
+    }
+
+    traced_var += controller_->computeTracedVarDot(current_state, traced_var, ref_state) / control_rate_;
+
+    publishInput(controller_->getRealInput(traced_var));
 
     rate.sleep();
   }
 
   goal_handle->succeed(result);
+}
+
+void SimpleSemitrailerNavigation::publishInput(const SemitrailerInput& input)
+{
+  semitrailer_interfaces::msg::Input input_msg;
+  input_msg.v = input(SemitrailerModel::V);
+  input_msg.alpha = input(SemitrailerModel::ALPHA);
+  input_pub_->publish(input_msg);
 }
 };  // namespace semitrailer_controller
 

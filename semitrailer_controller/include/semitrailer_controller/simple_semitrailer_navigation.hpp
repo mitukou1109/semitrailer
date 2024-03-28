@@ -22,8 +22,9 @@ public:
 private:
   using SimpleNavigationAction = semitrailer_interfaces::action::SimpleNavigation;
   using SimpleNavigationGoalHandle = rclcpp_action::ServerGoalHandle<SimpleNavigationAction>;
-  using SemitrailerState = vehicle_model::SemitrailerModel::State;
-  using SemitrailerInput = vehicle_model::SemitrailerModel::Input;
+  using SemitrailerModel = vehicle_model::SemitrailerModel;
+  using SemitrailerState = SemitrailerModel::State;
+  using SemitrailerInput = SemitrailerModel::Input;
 
   void stateCallback(const semitrailer_interfaces::msg::State::UniquePtr msg);
 
@@ -37,6 +38,8 @@ private:
 
   void executeSimpleNavigation(const std::shared_ptr<SimpleNavigationGoalHandle> goal_handle);
 
+  void publishInput(const SemitrailerInput& input);
+
   int control_rate_ = 10;
 
   std::unique_ptr<SemitrailerNLMPC> controller_;
@@ -47,9 +50,11 @@ private:
 
   rclcpp_action::Server<SimpleNavigationAction>::SharedPtr simple_navigation_action_server_;
 
-  SemitrailerState state_;
+  std::mutex state_mutex_;
 
-  SemitrailerInput input_;
+  SemitrailerState state_ = SemitrailerState::Zero();
+
+  SemitrailerInput input_ = SemitrailerInput::Zero();
 };
 
 }  // namespace semitrailer_controller
