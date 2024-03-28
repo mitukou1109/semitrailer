@@ -18,7 +18,7 @@ public:
   int operator()(const InputType& input, ValueType& value) const
   {
     function_(input, value);
-    return 1;
+    return 0;
   }
 
 private:
