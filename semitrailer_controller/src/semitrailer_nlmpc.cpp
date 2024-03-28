@@ -174,7 +174,7 @@ SemitrailerNLMPC::Constraint SemitrailerNLMPC::constraintFunction(const State& s
 SemitrailerNLMPC::ConstraintStateJacobian SemitrailerNLMPC::constraintStateJacobian(const State& state,
                                                                                     const Input& /* input */)
 {
-  ConstraintStateJacobian dCdx;
+  ConstraintStateJacobian dCdx = ConstraintStateJacobian::Zero();
   dCdx(0, SemitrailerModel::BETA) = 2 * state(SemitrailerModel::BETA);
 
   return dCdx;
@@ -185,7 +185,7 @@ SemitrailerNLMPC::ConstraintInputJacobian SemitrailerNLMPC::constraintInputJacob
 {
   const auto dummy_input = input.tail(NUM_OF_DUMMY_INPUT);
 
-  ConstraintInputJacobian dCdu;
+  ConstraintInputJacobian dCdu = ConstraintInputJacobian::Zero();
   dCdu(1, SemitrailerModel::V) = 2 * input(SemitrailerModel::V);
   dCdu(2, SemitrailerModel::ALPHA) = 2 * input(SemitrailerModel::ALPHA);
   dCdu.rightCols(NUM_OF_DUMMY_INPUT) = 2 * dummy_input.asDiagonal();
