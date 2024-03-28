@@ -18,11 +18,16 @@ target_link_libraries(semitrailer_nlmpc
   vehicle_model::semitrailer_model
 )
 
-ament_auto_add_library(simple_semitrailer_navigation SHARED
+ament_auto_add_library(${PROJECT_NAME} SHARED
   src/simple_semitrailer_navigation.cpp
 )
-target_link_libraries(simple_semitrailer_navigation
+target_link_libraries(${PROJECT_NAME}
   semitrailer_nlmpc
+)
+
+rclcpp_components_register_node(${PROJECT_NAME}
+  PLUGIN "semitrailer_controller::SimpleSemitrailerNavigation"
+  EXECUTABLE simple_semitrailer_navigation_node
 )
 
 ament_auto_package()
