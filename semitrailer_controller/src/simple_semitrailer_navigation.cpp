@@ -96,16 +96,21 @@ void SimpleSemitrailerNavigation::executeSimpleNavigation(const std::shared_ptr<
 
   while (rclcpp::ok())
   {
+    if (!rate.sleep())
+    {
+      RCLCPP_WARN(get_logger(), "Control loop missed its desired rate of %dHz", control_rate_);
+    }
+
     if (goal_handle->is_canceling())
     {
       RCLCPP_INFO(get_logger(), "Goal canceled");
       goal_handle->canceled(result);
-      return;
+      break;
     }
 
     {
       std::lock_guard<std::mutex> lock(state_mutex_);
-      state_dot = state_ - state;
+      state_dot = (state_ - state) * control_rate_;
       state = state_;
     }
 
@@ -113,11 +118,14 @@ void SimpleSemitrailerNavigation::executeSimpleNavigation(const std::shared_ptr<
     traced_var += traced_var_dot / control_rate_;
 
     publishInput(controller_->getRealInput(traced_var));
-
-    rate.sleep();
   }
 
+  if (goal_handle->is_active())
+  {
   goal_handle->succeed(result);
+  }
+
+  publishInput(SemitrailerInput::Zero());
 }
 
 void SimpleSemitrailerNavigation::publishInput(const SemitrailerInput& input)
