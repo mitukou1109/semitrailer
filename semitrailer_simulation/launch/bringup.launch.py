@@ -1,28 +1,7 @@
-import yaml
-from launch import LaunchContext, LaunchDescription
-from launch.actions import OpaqueFunction
+from launch import LaunchDescription
 from launch.substitutions import Command, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
-
-
-def _semitrailer_simulator_node(
-    context: LaunchContext,
-    semitrailer_props_yaml: PathJoinSubstitution,
-    semitrailer_simulator_config_yaml: PathJoinSubstitution,
-):
-    with open(context.perform_substitution(semitrailer_props_yaml), "r") as f:
-        semitrailer_props = yaml.safe_load(f)
-
-    return [
-        Node(
-            package="semitrailer_simulation",
-            executable="semitrailer_simulator_node",
-            name="semitrailer_simulator",
-            output="screen",
-            parameters=[semitrailer_props, semitrailer_simulator_config_yaml],
-        )
-    ]
 
 
 def generate_launch_description():
@@ -69,9 +48,12 @@ def generate_launch_description():
         parameters=[joint_state_publisher_config_yaml],
     )
 
-    semitrailer_simulator_node = OpaqueFunction(
-        function=_semitrailer_simulator_node,
-        args=[semitrailer_props_yaml, semitrailer_simulator_config_yaml],
+    semitrailer_simulator_node = Node(
+        package="semitrailer_simulation",
+        executable="semitrailer_simulator_node",
+        name="semitrailer_simulator",
+        output="screen",
+        parameters=[semitrailer_props_yaml, semitrailer_simulator_config_yaml],
     )
 
     rviz2_node = Node(

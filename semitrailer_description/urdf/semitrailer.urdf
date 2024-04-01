@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <robot name="semitrailer" xmlns:xacro="http://ros.org/wiki/xacro">
   <xacro:property name="props_yaml" value="$(arg props_yaml)" />
-  <xacro:property name="props" value="${xacro.load_yaml(props_yaml)}" />
+  <xacro:property name="props" value="${xacro.load_yaml(props_yaml)['/**']['ros__parameters']}" />
   <xacro:property name="wheel_radius" value="${props['wheel_radius']}" />
   <xacro:property name="wheel_width" value="${props['wheel_width']}" />
   <xacro:property name="trailer_length" value="${props['trailer_length']}" />
