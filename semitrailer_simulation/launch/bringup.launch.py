@@ -14,10 +14,10 @@ def generate_launch_description():
     semitrailer_props_yaml = PathJoinSubstitution(
         [semitrailer_simulation_share_dir, "config", "semitrailer_40.yaml"]
     )
-    joint_state_publisher_config_yaml = PathJoinSubstitution(
+    joint_state_publisher_params_yaml = PathJoinSubstitution(
         [semitrailer_simulation_share_dir, "config", "joint_state_publisher.yaml"]
     )
-    semitrailer_simulator_config_yaml = PathJoinSubstitution(
+    semitrailer_simulator_params_yaml = PathJoinSubstitution(
         [semitrailer_simulation_share_dir, "config", "semitrailer_simulator.yaml"]
     )
 
@@ -45,7 +45,7 @@ def generate_launch_description():
         executable="joint_state_publisher",
         name="joint_state_publisher",
         output="screen",
-        parameters=[joint_state_publisher_config_yaml],
+        parameters=[joint_state_publisher_params_yaml],
     )
 
     semitrailer_simulator_node = Node(
@@ -53,7 +53,7 @@ def generate_launch_description():
         executable="semitrailer_simulator_node",
         name="semitrailer_simulator",
         output="screen",
-        parameters=[semitrailer_props_yaml, semitrailer_simulator_config_yaml],
+        parameters=[semitrailer_props_yaml, semitrailer_simulator_params_yaml],
     )
 
     rviz2_node = Node(
