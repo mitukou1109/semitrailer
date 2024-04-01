@@ -2,6 +2,9 @@
 
 #include "semitrailer_controller/non_linear_functor.hpp"
 
+#include <ceres/ceres.h>
+#include <iostream>
+
 namespace semitrailer_controller
 {
 SemitrailerNLMPC::SemitrailerNLMPC(const SemitrailerParam& semitrailer_param) : model_(semitrailer_param)
@@ -55,17 +58,33 @@ Eigen::VectorXd SemitrailerNLMPC::computeInitialTracedVar(const SemitrailerState
           .finished()
           .replicate(prediction_horizon_, 1);
 
-  NonLinearFunctor functor([this, current_state, ref_state](const NonLinearFunctor::InputType& traced_var,
-                                                            NonLinearFunctor::ValueType& residual) {
-    residual = optimalityFunction(traced_var, current_state, ref_state);
-  });
+  auto cost_function = std::make_unique<ceres::DynamicNumericDiffCostFunction<NonLinearFunctor>>(
+      [this, current_state, ref_state](double const* const* parameters, double* residuals) {
+        const Eigen::Map<const Eigen::VectorXd> traced_var(parameters[0],
+                                                           (NUM_OF_INPUT + NUM_OF_CONSTRAINT) * prediction_horizon_);
+        Eigen::Map<Eigen::VectorXd> F(residuals, traced_var.size());
+        F = optimalityFunction(traced_var, current_state, ref_state);
+        return true;
+      });
+  cost_function->AddParameterBlock(traced_var.size());
+  cost_function->SetNumResiduals(traced_var.size());
 
-  Eigen::HybridNonLinearSolver solver(functor);
-  solver.solveNumericalDiff(traced_var);
+  auto problem = std::make_shared<ceres::Problem>();
+  problem->AddResidualBlock(cost_function.release(), nullptr, traced_var.data());
+
+  auto options = ceres::Solver::Options();
+  options.linear_solver_type = ceres::DENSE_QR;
+
+  auto summary = std::make_shared<ceres::Solver::Summary>();
+  ceres::Solve(options, problem.get(), summary.get());
+  // std::cout << summary->BriefReport() << std::endl;
 
   traced_var_dot_ = Eigen::VectorXd::Zero(traced_var.size());
 
   initialized_ = true;
+
+  // std::cout << traced_var.transpose() << std::endl;
+  // std::cout << optimalityFunction(traced_var, current_state, ref_state) << std::endl;
 
   return traced_var;
 }
@@ -79,21 +98,22 @@ Eigen::VectorXd SemitrailerNLMPC::computeTracedVarDot(const SemitrailerState& cu
     return {};
   }
 
-  NonLinearFunctor functor([this, current_state, current_traced_var,
-                            ref_state](const NonLinearFunctor::InputType& traced_var_dot,
-                                       NonLinearFunctor::ValueType& residual) {
-    const auto real_input = getRealInput(current_traced_var);
-    auto F_t = optimalityFunction(current_traced_var, current_state, ref_state);
-    residual = (optimalityFunction(
-                    current_traced_var + difference_spacing_ * traced_var_dot,
-                    current_state + difference_spacing_ * model_.stateFunction(current_state, real_input), ref_state) -
-                F_t) /
-                   difference_spacing_ +
-               damping_coefficient_ * F_t;
-  });
+  // NonLinearFunctor functor([this, current_state, current_traced_var,
+  //                           ref_state](const NonLinearFunctor::InputType& traced_var_dot,
+  //                                      NonLinearFunctor::ValueType& residual) {
+  //   const auto real_input = getRealInput(current_traced_var);
+  //   auto F_t = optimalityFunction(current_traced_var, current_state, ref_state);
+  //   residual = (optimalityFunction(
+  //                   current_traced_var + difference_spacing_ * traced_var_dot,
+  //                   current_state + difference_spacing_ * model_.stateFunction(current_state, real_input), ref_state)
+  //                   -
+  //               F_t) /
+  //                  difference_spacing_ +
+  //              damping_coefficient_ * F_t;
+  // });
 
-  Eigen::HybridNonLinearSolver solver(functor);
-  solver.solveNumericalDiff(traced_var_dot_);
+  // Eigen::HybridNonLinearSolver solver(functor);
+  // solver.solveNumericalDiff(traced_var_dot_);
 
   return traced_var_dot_;
 }

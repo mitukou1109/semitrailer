@@ -7,18 +7,15 @@ namespace semitrailer_controller
 class NonLinearFunctor
 {
 public:
-  using InputType = Eigen::HybridNonLinearSolver<NonLinearFunctor>::FVectorType;
-  using ValueType = Eigen::HybridNonLinearSolver<NonLinearFunctor>::FVectorType;
-  using Function = std::function<void(const InputType&, ValueType&)>;
+  using Function = std::function<bool(double const* const*, double*)>;
 
   NonLinearFunctor(Function&& function) : function_(std::forward<Function>(function))
   {
   }
 
-  int operator()(const InputType& input, ValueType& value) const
+  bool operator()(double const* const* parameters, double* residuals) const
   {
-    function_(input, value);
-    return 0;
+    return function_(parameters, residuals);
   }
 
 private:
