@@ -13,22 +13,56 @@ SimpleSemitrailerNavigation::SimpleSemitrailerNavigation(const std::string& node
   double tractor_length = 0.;
   double hitch_length = 0.;
   double trailer_length = 0.;
+  int prediction_horizon = 0;
+  double sampling_period = 0.;
+  double damping_coefficient = 0.;
+  double difference_spacing = 0.;
+  std::vector<double> state_weight(SemitrailerState::SizeAtCompileTime, 0.);
+  std::vector<double> input_weight(SemitrailerInput::SizeAtCompileTime, 0.);
+  double dummy_weight = 0.;
+  double max_coupler_angle = 0.;
+  double max_longitudinal_velocity = 0.;
+  double max_steering_angle = 0.;
 
   declare_parameter("control_rate", control_rate_);
+
   declare_parameter("tractor_length", tractor_length);
   declare_parameter("hitch_length", hitch_length);
   declare_parameter("trailer_length", trailer_length);
+  declare_parameter("prediction_horizon", prediction_horizon);
+  declare_parameter("sampling_period", sampling_period);
+  declare_parameter("damping_coefficient", damping_coefficient);
+  declare_parameter("difference_spacing", difference_spacing);
+  declare_parameter("state_weight", state_weight);
+  declare_parameter("input_weight", input_weight);
+  declare_parameter("dummy_weight", dummy_weight);
+  declare_parameter("max_coupler_angle", max_coupler_angle);
+  declare_parameter("max_longitudinal_velocity", max_longitudinal_velocity);
+  declare_parameter("max_steering_angle", max_steering_angle);
 
   get_parameter("control_rate", control_rate_);
+
   get_parameter("tractor_length", tractor_length);
   get_parameter("hitch_length", hitch_length);
   get_parameter("trailer_length", trailer_length);
+  get_parameter("prediction_horizon", prediction_horizon);
+  get_parameter("sampling_period", sampling_period);
+  get_parameter("damping_coefficient", damping_coefficient);
+  get_parameter("difference_spacing", difference_spacing);
+  get_parameter("state_weight", state_weight);
+  get_parameter("input_weight", input_weight);
+  get_parameter("dummy_weight", dummy_weight);
+  get_parameter("max_coupler_angle", max_coupler_angle);
+  get_parameter("max_longitudinal_velocity", max_longitudinal_velocity);
+  get_parameter("max_steering_angle", max_steering_angle);
 
   controller_ = std::make_unique<SemitrailerNLMPC>(
       (vehicle_model::SemitrailerModel::Param() << tractor_length, hitch_length, trailer_length).finished());
-  controller_->setParameter(40, 0.5, 10.0, 1e-4);
-  controller_->setWeight(SemitrailerState::Constant(0.5), SemitrailerInput::Constant(0.5), 0.01);
-  controller_->setLimit(M_PI_2, 10., M_PI_4);
+  controller_->setParameter(prediction_horizon, sampling_period, damping_coefficient, difference_spacing);
+  controller_->setWeight(Eigen::Map<SemitrailerState>(state_weight.data(), SemitrailerState::SizeAtCompileTime),
+                         Eigen::Map<SemitrailerInput>(input_weight.data(), SemitrailerInput::SizeAtCompileTime),
+                         dummy_weight);
+  controller_->setLimit(max_coupler_angle, max_longitudinal_velocity, max_steering_angle);
 
   input_pub_ = create_publisher<semitrailer_interfaces::msg::Input>("~/input", 10);
 
@@ -122,7 +156,7 @@ void SimpleSemitrailerNavigation::executeSimpleNavigation(const std::shared_ptr<
 
   if (goal_handle->is_active())
   {
-  goal_handle->succeed(result);
+    goal_handle->succeed(result);
   }
 
   publishInput(SemitrailerInput::Zero());
