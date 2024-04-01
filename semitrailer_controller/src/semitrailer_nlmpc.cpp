@@ -15,8 +15,6 @@ void SemitrailerNLMPC::setParameter(const std::size_t prediction_horizon, const 
   sampling_period_ = sampling_period;
   damping_coefficient_ = damping_coefficient;
   difference_spacing_ = difference_spacing;
-
-  initialized_ = false;
 }
 
 void SemitrailerNLMPC::setWeight(const SemitrailerState& state_weight, const SemitrailerInput& input_weight,
@@ -63,39 +61,32 @@ Eigen::VectorXd SemitrailerNLMPC::computeInitialTracedVar(const SemitrailerState
   Eigen::HybridNonLinearSolver solver(functor);
   solver.solveNumericalDiff(traced_var);
 
-  traced_var_dot_ = Eigen::VectorXd::Zero(traced_var.size());
-
-  initialized_ = true;
-
   return traced_var;
 }
 
 Eigen::VectorXd SemitrailerNLMPC::computeTracedVarDot(const SemitrailerState& current_state,
+                                                      const SemitrailerState& current_state_dot,
                                                       const Eigen::VectorXd& current_traced_var,
+                                                      const Eigen::VectorXd& current_traced_var_dot,
                                                       const SemitrailerState& ref_state)
 {
-  if (!initialized_)
-  {
-    return {};
-  }
+  NonLinearFunctor functor(
+      [this, current_state, current_state_dot, current_traced_var,
+       ref_state](const NonLinearFunctor::InputType& traced_var_dot, NonLinearFunctor::ValueType& residual) {
+        auto F_t = optimalityFunction(current_traced_var, current_state, ref_state);
+        residual = (optimalityFunction(current_traced_var + difference_spacing_ * traced_var_dot,
+                                       current_state + difference_spacing_ * current_state_dot, ref_state) -
+                    F_t) /
+                       difference_spacing_ +
+                   damping_coefficient_ * F_t;
+      });
 
-  NonLinearFunctor functor([this, current_state, current_traced_var,
-                            ref_state](const NonLinearFunctor::InputType& traced_var_dot,
-                                       NonLinearFunctor::ValueType& residual) {
-    const auto real_input = getRealInput(current_traced_var);
-    auto F_t = optimalityFunction(current_traced_var, current_state, ref_state);
-    residual = (optimalityFunction(
-                    current_traced_var + difference_spacing_ * traced_var_dot,
-                    current_state + difference_spacing_ * model_.stateFunction(current_state, real_input), ref_state) -
-                F_t) /
-                   difference_spacing_ +
-               damping_coefficient_ * F_t;
-  });
+  auto traced_var_dot = current_traced_var_dot;
 
   Eigen::HybridNonLinearSolver solver(functor);
-  solver.solveNumericalDiff(traced_var_dot_);
+  solver.solveNumericalDiff(traced_var_dot);
 
-  return traced_var_dot_;
+  return traced_var_dot;
 }
 
 std::vector<SemitrailerNLMPC::SemitrailerState>

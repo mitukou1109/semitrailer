@@ -24,8 +24,9 @@ public:
   Eigen::VectorXd computeInitialTracedVar(const SemitrailerState& current_state, const SemitrailerState& ref_state,
                                           const SemitrailerInput& initial_guess);
 
-  Eigen::VectorXd computeTracedVarDot(const SemitrailerState& current_state, const Eigen::VectorXd& current_traced_var,
-                                      const SemitrailerState& ref_state);
+  Eigen::VectorXd computeTracedVarDot(const SemitrailerState& current_state, const SemitrailerState& current_state_dot,
+                                      const Eigen::VectorXd& current_traced_var,
+                                      const Eigen::VectorXd& current_traced_var_dot, const SemitrailerState& ref_state);
 
   std::vector<SemitrailerState> predictTrajectory(const SemitrailerState& current_state,
                                                   const Eigen::VectorXd& current_traced_var);
@@ -101,9 +102,5 @@ private:
   double max_coupler_angle_ = 0.;
   double max_longitudinal_velocity_ = 0.;
   double max_steering_angle_ = 0.;
-
-  bool initialized_ = false;
-
-  Eigen::VectorXd traced_var_dot_;
 };
 }  // namespace semitrailer_controller

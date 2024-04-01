@@ -78,16 +78,17 @@ void SimpleSemitrailerNavigation::executeSimpleNavigation(const std::shared_ptr<
   auto feedback = std::make_shared<SimpleNavigationAction::Feedback>();
   auto result = std::make_shared<SimpleNavigationAction::Result>();
 
-  SemitrailerState current_state;
+  SemitrailerState state;
   {
     std::lock_guard<std::mutex> lock(state_mutex_);
-    current_state = state_;
+    state = state_;
   }
+  SemitrailerState state_dot = SemitrailerState::Zero();
 
   SemitrailerState ref_state;
   ref_state << goal->goal.x, goal->goal.y, goal->goal.theta, goal->goal.beta;
-  auto traced_var =
-      controller_->computeInitialTracedVar(current_state, ref_state, (SemitrailerInput() << 10., 0.).finished());
+  auto traced_var = controller_->computeInitialTracedVar(state, ref_state, (SemitrailerInput() << 0., 0.).finished());
+  Eigen::VectorXd traced_var_dot = Eigen::VectorXd::Zero(traced_var.size());
 
   publishInput(controller_->getRealInput(traced_var));
 
@@ -104,10 +105,12 @@ void SimpleSemitrailerNavigation::executeSimpleNavigation(const std::shared_ptr<
 
     {
       std::lock_guard<std::mutex> lock(state_mutex_);
-      current_state = state_;
+      state_dot = state_ - state;
+      state = state_;
     }
 
-    traced_var += controller_->computeTracedVarDot(current_state, traced_var, ref_state) / control_rate_;
+    traced_var_dot = controller_->computeTracedVarDot(state, state_dot, traced_var, traced_var_dot, ref_state);
+    traced_var += traced_var_dot / control_rate_;
 
     publishInput(controller_->getRealInput(traced_var));
 
